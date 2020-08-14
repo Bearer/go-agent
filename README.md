@@ -1,5 +1,7 @@
 # Bearer.sh Go agent
 
+[![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square)](https://pkg.go.dev/github.com/bearer/go-agent)
+
 This module provides a pure Go HTTP (HTTPS, HTTP/2) transport decorator for Go
 Web API clients. It relies on the [Bearer.sh](https://www.bearer.sh) platform
 to provide metrics observation and anomaly detection.
