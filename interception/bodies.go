@@ -30,19 +30,28 @@ func NewBodyReadCloser(readCloser io.ReadCloser, peekSize int) *BodyReadCloser {
 
 // Read gives the usual io.Reader behaviour
 func (r *BodyReadCloser) Read(p []byte) (int, error) {
-	if r.pos < r.peekSize && (r.peekBuffer == nil || r.pos < len(r.peekBuffer)) {
+	if r.peekBuffer == nil || r.pos < len(r.peekBuffer) {
 		r.ensurePeekBuffer()
-		peekN := copy(p, r.peekBuffer)
-		if r.peekError != nil {
-			// Use the normal read
-			r.pos = r.peekSize + 1
+		to := r.pos + len(p)
+		if to > len(r.peekBuffer) {
+			to = len(r.peekBuffer)
+		}
+		peekN := copy(p, r.peekBuffer[r.pos:to])
+		r.pos += peekN
 
+		// Only return EOF when we've read past the peeked position
+		if r.peekError != nil && (r.peekError != io.EOF || r.pos >= len(r.peekBuffer)) {
 			return peekN, r.peekError
 		}
 
-		n, err := r.readCloser.Read(p[peekN:])
-		r.pos += peekN + n
-		return peekN + n, err
+		// Read beyond the peek buffer if neccessary
+		if peekN < len(p) {
+			n, err := r.readCloser.Read(p[peekN:])
+			r.pos += n
+			return peekN + n, err
+		}
+
+		return peekN, nil
 	}
 
 	return r.readCloser.Read(p)

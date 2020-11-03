@@ -10,34 +10,68 @@ import (
 
 func TestBodyReadCloser(t *testing.T) {
 	tests := []struct {
-		name string
-		data string
+		name       string
+		data       string
+		bufferSize int
+		peekSize   int
 	}{
-		{`small`, `small`},
-		{`large`, `0123456789`},
+		{`empty with peek`, ``, 10, 10},
+		{`empty NO peek`, ``, 10, 0},
+		{`read smaller than peek`, `0123456789`, 5, 10},
+		{`read equal to peek`, `0123456789`, 10, 10},
+		{`read larger than peek`, `0123456789`, 10, 5},
+		{`data smaller than buffers`, `01234`, 6, 10},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			brc := NewBodyReadCloser(ioutil.NopCloser(strings.NewReader(tt.data)), 11)
+			brc := NewBodyReadCloser(ioutil.NopCloser(strings.NewReader(tt.data)), tt.peekSize)
 			length := len(tt.data)
 
-			buffer := make([]byte, length)
-			n, err := brc.Read(buffer)
-			if n != length || err != io.EOF {
-				t.Errorf(`Read() returned length: %d, error %s`, n, err)
+			bufferSize := tt.bufferSize
+			if bufferSize == -1 {
+				bufferSize = length
 			}
-			actual := string(buffer)
+
+			peekSize := tt.peekSize
+			if length < peekSize {
+				peekSize = length
+			}
+
+			final := make([]byte, length)
+			buffer := make([]byte, bufferSize)
+
+			totalRead := 0
+			i := 0
+
+			for {
+				n, err := brc.Read(buffer)
+				if err != nil && err != io.EOF {
+					t.Errorf(`Read() returned error %s`, err)
+				}
+				totalRead += n
+
+				if n > 0 {
+					copy(final[i*bufferSize:(i*bufferSize)+n], buffer[:n])
+				}
+				if err == io.EOF {
+					break
+				}
+
+				i++
+			}
+
+			if totalRead != length {
+				t.Errorf(`Read() expected total read: %d, actual: %d`, length, totalRead)
+			}
+
+			actual := string(final)
 			if actual != tt.data {
 				t.Errorf(`Read() expected: %v, actual: %v`, tt.data, actual)
 			}
 
 			buffer, _ = brc.Peek()
 			actual = string(buffer)
-			peekLength := 10
-			if length < peekLength {
-				peekLength = length
-			}
-			if actual != tt.data[:peekLength] {
+			if actual != tt.data[:peekSize] {
 				t.Errorf(`Peek() expected: %v, actual: %v`, tt.data[:10], actual)
 			}
 		})
